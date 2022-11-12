@@ -36,9 +36,14 @@ int main(int argc, char *argv[]) {
     }
 
     if (argc <= 1 || !rom_opened) {
-        printf("usage: cnes [flags] <rom_file> (<fm2_movie_file>)\n");
+        printf("usage: cnes [flags] rom_file [fm2_movie_file]\n");
         printf("flags:\n");
         printf("    -s : open a save file for the provided rom\n");
+        printf("\n");
+        printf("Controls:\n");
+        printf("D-pad: WASD\n");
+        printf("A:     k  |  B:      j\n");
+        printf("Start: i  |  Select: u\n");
         return 0;
     }
 

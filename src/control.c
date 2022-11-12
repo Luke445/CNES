@@ -21,6 +21,8 @@ double ms_per_frame;
 void add_cpu_cycles(int cycles) {
     master_clock.ppu_cycles += cycles * 3;
     master_clock.cpu_cycles += cycles;
+
+    cycles_todo -= cycles;
 }
 
 int get_ppu_clocks() {
@@ -49,12 +51,14 @@ void start_rom(FILE *rom_file) {
         printf("ppu init failed\n");
         return;
     }
-    init_apu();
     init_cpu();
+    init_apu();
+
+    cycles_todo = 0;
+    skip_frame = false;
 
     while (1) {
-        gettimeofday(&start, NULL);
-        while (1) {
+        while (cycles_todo > 0) {
             // 3 ppu cycles per cpu cycle
             step();
 
@@ -70,24 +74,18 @@ void start_rom(FILE *rom_file) {
             if (generate_irq != 0)
                 irq();
 
+            if (cycles_todo > cycles_per_frame) // occasionally skip a frame if VSYNC prevents 60.1 fps
+                skip_frame = true;
+
             if (ppu_status != good) {
                 //printf("status %d\n", ppu_status);
                 if (ppu_status == do_nmi)
                     nmi();
-                else if (ppu_status == frame)
-                    break;
                 else
                     goto end;
             }
         }
-
-        gettimeofday(&end, NULL);
-
-        ms_per_frame = 1000 / ((fps_limit * speed_modifier_percent) / 100);
-        ms_elapsed = (end.tv_sec - start.tv_sec) * 1000 + (double)(end.tv_usec - start.tv_usec) / 1000;
-        if (ms_elapsed < ms_per_frame)
-            usleep((ms_per_frame - ms_elapsed) * 1000);
-
+        usleep(1000);
 
         while (pause_emu) {
             usleep(100000); // 0.1 sec

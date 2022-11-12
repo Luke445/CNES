@@ -39,6 +39,7 @@ uint8_t background[WIDTH];
 
 const SDL_RendererFlags renderer_flags = SDL_RENDERER_ACCELERATED;
 const SDL_RendererFlags vsync_renderer_flags = renderer_flags | SDL_RENDERER_PRESENTVSYNC;
+//const SDL_RendererFlags vsync_renderer_flags = renderer_flags | 0;
 
 bool movie_mode = false;
 bool movie_2controllers = false;
@@ -252,8 +253,8 @@ void read_events() {
     						update_renderers();
     					}
     					break;
-    				case SDLK_t: // configurable test
-    					sprite0_hit = true;
+    				case SDLK_t: // test
+    					//sprite0_hit = true;
     					break;
     			}
     			break;
@@ -362,6 +363,47 @@ void set_controller(bool value) {
 	controller_reading = value;
 }
 
+void flags_update(int cur_pixel) {
+	if (show_sprites && sprite0_check) {
+		uint8_t y, sprite_flags, next_byte, next_byte2;
+		int x_inc, x, color_index;
+		bool horizontal_flip;
+
+		y = secondary_oam[0] + 1;
+		if (y >= 0xF0)
+			return;
+
+		sprite_flags = secondary_oam[2];
+		x = secondary_oam[3];
+		if (sprite_flags & 0x40) // horizontal flip
+			x_inc = 1;
+		else {
+			x_inc = -1;
+			x += 7;
+		}
+
+		next_byte = sprite_data[0];
+		next_byte2 = sprite_data[1];
+
+		for (int j = 0; j < 8; j++) {
+			if (left_clip_sprites && x < 8)
+	           	continue;
+			color_index = ((1 & next_byte2) << 1 | (1 & next_byte));
+	    	next_byte = next_byte >> 1;
+	        next_byte2 = next_byte2 >> 1;
+	        if ((color_index & 0x3) != 0 && x < WIDTH) {
+	        	if ((background[x] & 0x3) != 0 && x != 255) {
+	        		if (x <= cur_pixel)
+	           			sprite0_hit = true;
+	           	}
+	        }
+
+	        x += x_inc;
+	    }
+
+	}
+}
+
 uint8_t get_ppu_status() {
 	uint8_t out = 0;
 
@@ -374,7 +416,7 @@ uint8_t get_ppu_status() {
 
 
 	if (cur_scanline < HEIGHT && cur_scanline_pixel <= 255) // dry run of line up to current pixel to set flags
-		finish_line(cur_scanline, cur_scanline_pixel);
+		flags_update(cur_scanline_pixel);
 
 	if (vblank_flag) {
 		out |= 0b10000000;
@@ -438,53 +480,55 @@ void draw_tile(uint32_t *pixel_buffer, int line_width, int pos, uint16_t tile_ad
 	}
 }
 
-void finish_line(int line, int flags_update) {
-	uint16_t ppu_address_before = ppu_address;
+void finish_line(int line) {
 	if (show_sprites) {
-		uint8_t value, y, x, sprite_flags;
-		int palette_num;
+		uint8_t priority[256];
+		memset(priority, 0, 256);
+		uint8_t y, sprite_flags;
+		int palette_num, x_inc, x;
 		int data_index = 0;
-		bool vertical_flip, horizontal_flip, sprite_priority;
+		bool sprite_priority;
 		for (int i = 0; i < secondary_oam_index; i+=4) {
 			y = secondary_oam[i] + 1;
 			if (y >= 0xF0)
 				continue;
 
-			uint8_t sprite_flags = secondary_oam[i + 2];
-			int palette_num = 4 + (sprite_flags & 0x3);
-			sprite_priority = sprite_flags & 0x20 ? true : false;
-			horizontal_flip = sprite_flags & 0x40 ? true : false;
-			vertical_flip = sprite_flags & 0x80 ? true : false;
-			int x_inc = horizontal_flip ? 1 : -1;
-			int x_start = horizontal_flip ? 0 : 7;
+			sprite_flags = secondary_oam[i + 2];
+			x = secondary_oam[i + 3];
 
-			uint8_t x = secondary_oam[i + 3];
+			palette_num = 4 + (sprite_flags & 0x3);
+			sprite_priority = sprite_flags & 0x20 ? true : false;
+			
+			if (sprite_flags & 0x40) // horizontal flip
+				x_inc = 1;
+			else {
+				x_inc = -1;
+				x += 7;
+			}
 
 			uint8_t next_byte = sprite_data[data_index++];
 			uint8_t next_byte2 = sprite_data[data_index++];
 
-			for (int j = x_start; j >= 0 && j < 8; j += x_inc) {
-				if (left_clip_sprites && (x + j) < 8)
+			for (int j = 0; j < 8; j++) {
+				if (left_clip_sprites && x < 8)
 		           	continue;
 				int color_index = palette_num*4 + ((1 & next_byte2) << 1 | (1 & next_byte));
-		    	next_byte = next_byte >> 1;
-		        next_byte2 = next_byte2 >> 1;
-		        if ((color_index & 0x3) != 0 && x + j < WIDTH) {
-		        	if (sprite0_check && i == 0 && (background[x + j] & 0x3) != 0 && (x + j) != 255) {
-		        		if (flags_update == -1 || (x + j) <= flags_update)
-		           			sprite0_hit = true;
+		    	next_byte >>= 1;
+		        next_byte2 >>= 1;
+		        if ((color_index & 0x3) != 0 && x < WIDTH) {
+		        	if (sprite0_check && i == 0 && (background[x] & 0x3) != 0 && x != 255) {
+		           		sprite0_hit = true;
 		           	}
-		           	if (!sprite_priority || (background[x + j] & 0x3) == 0) {
-		           		background[x + j] = color_index;
+		           	if (sprite_priority)
+		           		priority[x] = 1;
+
+		           	if (!priority[x] || (background[x] & 0x3) == 0) {
+		           		background[x] = color_index;
 		           	}
 		        }
+		        x += x_inc;
 		    }
 		}
-	}
-
-	if (flags_update != -1) { // dry run should only update the hit flag
-		ppu_address = ppu_address_before;
-		return;
 	}
 
 	int start_pixel = line*WIDTH;
@@ -584,6 +628,12 @@ void dump_vram() {
 
 void next_frame() {
 	read_events();
+	master_clock.frames++;
+
+	if (skip_frame) {
+		skip_frame = false;
+		return;
+	}
 
 	SDL_UpdateTexture(texture, NULL, pixels, WIDTH * sizeof(uint32_t));
 	SDL_RenderCopy(renderer, texture, NULL, NULL);
@@ -604,8 +654,6 @@ void next_frame() {
 		SDL_RenderCopy(chr_renderer, chr_texture, NULL, NULL);
 		SDL_RenderPresent(chr_renderer);
 	}
-
-	master_clock.frames++;
 }
 
 void draw_tile_slice(int line, int pixel) {
@@ -776,12 +824,14 @@ void ppu_cycle(int line, int pixel) {
 	}
 	else if (p == 257) { // sprite eval and stuff
 		// hori (v) = hori (t)
-		if (show_background || show_sprites)
+		if (show_background || show_sprites) {
+			oam_address = 0;
 			ppu_address = (ppu_address & ~0b10000011111) | (ppu_address_tmp & 0b10000011111);
+		}
 
 		// finish drawing scanline, and incorporate the sprites currently loaded
 		if (line != 261)
-			finish_line(line, -1);
+			finish_line(line);
 
 		memset(background, 0, WIDTH);
 
@@ -800,6 +850,7 @@ void ppu_cycle(int line, int pixel) {
 	}
 	else if (p <= 320) { // sprite fetches
 		if (show_background || show_sprites) {
+			oam_address = 0;
 			if (line == 261) {
 				if (p >= 280 && p <= 304) {
 					ppu_address = (ppu_address & 0b10000011111) | (ppu_address_tmp & ~0b10000011111);
@@ -897,10 +948,8 @@ int update_ppu(int cycles_passed) {
 		cur_scanline_pixel++;
 		if (cur_scanline_pixel == 341) {
 			cur_scanline++;
-			if (cur_scanline == 262) {
+			if (cur_scanline == 262)
 				cur_scanline = 0; 
-				ret_val = frame;
-			}
 			cur_scanline_pixel = 0;
 		}
 	}

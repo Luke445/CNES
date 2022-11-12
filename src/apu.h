@@ -10,6 +10,8 @@ void early_update_apu();
 
 void update_apu();
 
+void update_dmc();
+
 void process_apu_updates();
 
 void apu_frame_update();

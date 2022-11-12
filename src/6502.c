@@ -63,9 +63,9 @@ void step() {
         exit(0);
     }
 
-    if (pc != 0xe191 && pc != 0xe194 && pc != 0xe0b0 && pc != 0xe0ad && pc != 0xe0ae && pc != 0xe08c && pc != 0xe08b && pc != 0xe077 && pc != 0xe076) {
-        if (pc != 0xe0c6 && pc != 0xe0c7)
-            printf("%s   s: 0x1%x, pc: 0x%x, cycles: %d\n", opcode->debug_name, s, pc, opcode->cycles);
+    if (pc == 0xD0C6) {
+        printf("rng update -- %02x\n", peek(0x4A));
+       // printf("%s   s: 0x1%x, pc: 0x%x, cycles: %d\n", opcode->debug_name, s, pc, opcode->cycles);
     }
 #endif
 
@@ -160,7 +160,7 @@ void nmi() {
 
 void irq() {
     if (!i) {
-        printf("irq\n");
+        //printf("irq\n");
         add_cpu_cycles(7);
         poke_stack((pc >> 8) & 0xFF);
         poke_stack(pc & 0xFF);

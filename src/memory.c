@@ -46,7 +46,6 @@ char vram[2048] = {0};
 
 uint8_t ppu_read_buffer = 0;
 bool ppu_reg_write_latch = false;
-uint8_t oam_address = 0;
 uint8_t ppu_bus_data = 0;
 uint8_t cpu_bus_data = 0;
 
@@ -76,17 +75,19 @@ void init_memory(FILE *rom_file) {
 	flags1 = header[6];
 	mirroring = flags1 & 0x1 ? vertical_mirroring : horizontal_mirroring;
 	has_battery = (flags1 & 0x2) >> 1;
-	printf("battery: %d\n", has_battery);
+	printf("supports save data: %d\n", has_battery);
 	has_trainer = (flags1 & 0x4) >> 2;
-	printf("trainer: %d\n", has_trainer);
+	if (has_trainer)
+		printf("!!! Rom has trainer data !!!\n");
 	ignore_mirror = (flags1 & 0x8) >> 3;
-	printf("4-screen mirroring: %d\n", ignore_mirror);
+	if (ignore_mirror) 
+		printf("!!! Rom uses 4-screen mirroring !!!\n");
 
 	flags2 = header[7];
 	unisystem = flags2 & 0x1;
 	playchoice = (flags2 & 0x2) >> 1;
 	if ((flags2 & 0x0C) == 0x08) { // iNES 2.0
-		printf("iNES 2.0\n");
+		printf("!!! iNES 2.0 !!!\n");
 		/*
 		has_wram = false;
 		int prg_ram_size = header[10];
@@ -124,20 +125,23 @@ void init_memory(FILE *rom_file) {
 			memset(wram, 0, wram_size);
 	}
 
-	printf("num_prg_blocks: %d\n", num_prg_blocks);
+	printf("PRG ROM blocks: %d\n", num_prg_blocks);
 	prg_rom = (char *) malloc(num_prg_blocks * 16384);
 	fread(prg_rom, num_prg_blocks * 16384, 1, rom_file);
 
-	printf("num_chr_blocks: %d\n", num_chr_blocks);
 	if (num_chr_blocks >= 1) {
 		chr_rom = (char *) malloc(num_chr_blocks * 8192);
 		fread(chr_rom, num_chr_blocks * 8192, 1, rom_file);
 		chr_ram = false;
+		printf("CHR ROM blocks: %d\n", num_chr_blocks);
 	}
 	else {
 		chr_rom = (char *) malloc(8192);
+		num_chr_blocks = 1; // used by mappers: make sure they know there is 8k of chr-ram
 		chr_ram = true;
+		printf("CHR RAM blocks: %d\n", num_chr_blocks);
 	}
+
 
 	// default
 	cart_read_func = m0_cart_read;
@@ -186,6 +190,7 @@ void init_memory(FILE *rom_file) {
 	printf("mirroring: %d\n", mirroring);
 
 	ppu_address = 0;
+	oam_address = 0;
 	printf("finished mem init\n");
 }
 
@@ -247,6 +252,8 @@ uint8_t peek(uint16_t address) {
 				return tmp;
 			case 4:  // OAMDATA
 				tmp = oam_data[oam_address];
+				if (oam_address % 4 == 2) // byte 2 for each sprite has some missing bits.
+					tmp &= 0xE3;
 				ppu_bus_data = tmp;
 				return tmp;
 			case 7:  // PPUDATA

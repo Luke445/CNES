@@ -20,6 +20,7 @@ enum mirror_modes {
 int mirroring;
 
 // shared for direct access by ppu
+uint8_t oam_address;
 uint8_t oam_data[256];
 uint8_t palette_ram[32];
 int sprite_table_addr;

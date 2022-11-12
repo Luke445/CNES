@@ -6,7 +6,6 @@ typedef uint32_t Palette[4];
 enum ppu_codes {
     good,
     do_nmi,
-    frame,
     quit
 };
 
@@ -32,7 +31,9 @@ uint16_t get_sprite_addr(int line, int sprite_index);
 
 void ppu_cycle(int line, int pixel);
 
-void finish_line(int line, int flags_update);
+void flags_update(int cur_pixel);
+
+void finish_line(int line);
 
 void load_secondary_oam(int line);
 

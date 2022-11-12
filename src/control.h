@@ -9,9 +9,13 @@ typedef struct Clock {
 } Clock;
 Clock master_clock;
 
+int cycles_todo;
+bool skip_frame;
+
 enum irq_masks {
     apu_irq = 1,
-    cart_irq = 2
+    cart_irq = 2,
+    dmc_irq = 4
 };
 int generate_irq;
 bool reset_pressed;
